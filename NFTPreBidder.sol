@@ -37,41 +37,9 @@ contract NFTPreBidder is Ownable, INFTPreBidder {
 
     modifier bidExists(uint256 bidId) {
         require(
-            bidId <= _nonce && _bidInfo[bidId].bidder != address(0),
+            _bidInfo[bidId].bidder != address(0),
             "NFTPreBidder: bid does not exist"
         );
-        _;
-    }
-
-    modifier collateralAndLoanAssetMatch(uint256 bidId, uint256 loanId) {
-        Bid memory bid = _bidInfo[bidId];
-        (
-            ,
-            ,
-            ,
-            ,
-            address collateralAddressFromLoan,
-            address loanAssetAddressFromLoan,
-            ,
-            ,
-            uint256 tokenIdFromLoan
-        ) = facilitator.loanInfo(loanId);
-
-        require(
-            bid.loanAssetContractAddress == loanAssetAddressFromLoan,
-            "NFTPreBidder: Fulfilling bid with incorrect loan asset"
-        );
-        require(
-            bid.collateralContractAddress == collateralAddressFromLoan,
-            "NFTPreBidder: Fulfilling bid with incorrect collateral address"
-        );
-
-        if (bid.collateralTokenId >= 0) {
-            require(
-                tokenIdFromLoan == uint256(bid.collateralTokenId),
-                "NFTPreBidder: Fulfilling bid with incorrect tokenId"
-            );
-        }
         _;
     }
 
@@ -144,9 +112,12 @@ contract NFTPreBidder is Ownable, INFTPreBidder {
         external
         override
         bidExists(bidId)
-        collateralAndLoanAssetMatch(bidId, loanId)
     {
         Bid memory bid = _bidInfo[bidId];
+        require(
+            _collateralAndLoanAssetMatch(bid, loanId),
+            "NFTPreBidder: collateral or loan asset do not match"
+        );
 
         ERC20(bid.loanAssetContractAddress).approve(
             address(facilitator),
@@ -161,8 +132,13 @@ contract NFTPreBidder is Ownable, INFTPreBidder {
         external
         override
         bidExists(bidId)
-        collateralAndLoanAssetMatch(bidId, loanId)
     {
+        Bid memory bid = _bidInfo[bidId];
+        require(
+            _collateralAndLoanAssetMatch(bid, loanId),
+            "NFTPreBidder: collateral or loan asset do not match"
+        );
+
         _fulfillBid(bidId, loanId);
     }
 
@@ -172,8 +148,34 @@ contract NFTPreBidder is Ownable, INFTPreBidder {
 
     // === internal ===
 
+    function _collateralAndLoanAssetMatch(Bid memory bid, uint256 loanId)
+        private
+        returns (bool)
+    {
+        (
+            ,
+            ,
+            ,
+            ,
+            address collateralAddressFromLoan,
+            address loanAssetAddressFromLoan,
+            ,
+            ,
+            uint256 tokenIdFromLoan
+        ) = facilitator.loanInfo(loanId);
+
+        bool tokenIdsMatch = bid.collateralTokenId >= 0
+            ? tokenIdFromLoan == uint256(bid.collateralTokenId)
+            : true;
+        return
+            bid.loanAssetContractAddress == loanAssetAddressFromLoan &&
+            bid.collateralContractAddress == collateralAddressFromLoan &&
+            tokenIdsMatch;
+    }
+
     function _fulfillBid(uint256 bidId, uint256 loanId) private {
         Bid memory bid = _bidInfo[bidId];
+        delete _bidInfo[bidId];
 
         ERC20(bid.loanAssetContractAddress).safeTransferFrom(
             bid.bidder,
@@ -189,8 +191,6 @@ contract NFTPreBidder is Ownable, INFTPreBidder {
             bid.maxDurationSeconds,
             bid.bidder
         );
-
-        delete _bidInfo[bidId];
 
         emit FulfillBid(bidId, msg.sender, loanId);
     }

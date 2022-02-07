@@ -250,10 +250,10 @@ contract NFTPreBidderTest is DSTest {
             address(borrower)
         );
 
-        vm.expectRevert("NFTPreBidder: Fulfilling bid with incorrect tokenId");
+        vm.expectRevert("NFTPreBidder: collateral or loan asset do not match");
         preBidder.fulfillBid(bidId, loanId);
 
-        vm.expectRevert("NFTPreBidder: Fulfilling bid with incorrect tokenId");
+        vm.expectRevert("NFTPreBidder: collateral or loan asset do not match");
         preBidder.fulfillBidWithNoApprovals(bidId, loanId);
     }
 
@@ -319,7 +319,7 @@ contract NFTPreBidderTest is DSTest {
             address(borrower)
         );
 
-        // a client would only call this if NFTPreBidder contract has approved NFTLoanFacilitator to transfer NFT being collateralized AND loan asset ERC20
+        // a client would only call this if NFTPreBidder contract has approved NFTLoanFacilitator to transfer loan asset ERC20
         vm.startPrank(address(preBidder));
         punks.setApprovalForAll(address(facilitator), true);
         dai.approve(address(facilitator), type(uint256).max);
