@@ -44,6 +44,8 @@ contract NFTPreBidderGasBenchmarkTest is DSTest {
         vm.stopPrank();
 
         vm.startPrank(lender);
+        dai.mint(loanAmount, lender);
+        dai.approve(address(preBidder), loanAmount);
         bidId = preBidder.createBidForNFT(
             address(punks),
             int256(tokenId),
@@ -62,10 +64,10 @@ contract NFTPreBidderGasBenchmarkTest is DSTest {
             loanDuration,
             address(borrower)
         );
+        vm.stopPrank();
 
-        vm.startPrank(lender);
-        dai.mint(loanAmount, lender);
-        dai.approve(address(preBidder), loanAmount);
+        vm.startPrank(address(preBidder));
+        dai.approve(address(facilitator), type(uint256).max);
         vm.stopPrank();
     }
 
@@ -85,7 +87,13 @@ contract NFTPreBidderGasBenchmarkTest is DSTest {
         preBidder.fulfillBid(bidId, loanId);
     }
 
+    function testFulfillBidWithNoApprovalsGas() public {
+        vm.startPrank(borrower);
+        preBidder.fulfillBidWithNoApprovals(bidId, loanId);
+    }
+
     function testCancelBidGas() public {
+        vm.startPrank(lender);
         preBidder.cancelBid(bidId);
     }
 }
@@ -337,6 +345,38 @@ contract NFTPreBidderTest is DSTest {
         assertEq(lendTicket.ownerOf(loanId), lender);
     }
 
+    function testFulfillBidWithNoApprovalsRevertsIfNoPriorApprovals() public {
+        uint256 tokenId = setUpWithPunk(borrower);
+        setUpWithDai(lender);
+
+        uint256 lenderBalance = dai.balanceOf(lender);
+        uint256 borrowerBalance = dai.balanceOf(borrower);
+
+        vm.startPrank(lender);
+        uint256 bidId = preBidder.createBidForNFT(
+            address(punks),
+            int256(tokenId),
+            address(dai),
+            interestRate,
+            loanAmount,
+            loanDuration
+        );
+        vm.startPrank(borrower);
+        uint256 loanId = facilitator.createLoan(
+            tokenId,
+            address(punks),
+            interestRate,
+            loanAmount,
+            address(dai),
+            loanDuration,
+            address(borrower)
+        );
+
+        vm.startPrank(borrower);
+        vm.expectRevert("ERC20: transfer amount exceeds allowance");
+        preBidder.fulfillBidWithNoApprovals(bidId, loanId);
+    }
+
     function testCancelBidSuccessful() public {
         uint256 tokenId = setUpWithPunk(borrower);
         vm.startPrank(lender);
@@ -355,6 +395,24 @@ contract NFTPreBidderTest is DSTest {
         vm.startPrank(borrower);
         vm.expectRevert("NFTPreBidder: bid does not exist");
         preBidder.fulfillBid(bidId, 1);
+    }
+
+    function testCancelBidRevertsIfNotBidder() public {
+        uint256 tokenId = setUpWithPunk(borrower);
+        vm.startPrank(lender);
+        uint256 bidId = preBidder.createBidForNFT(
+            address(punks),
+            int256(tokenId),
+            address(dai),
+            interestRate,
+            loanAmount,
+            loanDuration
+        );
+
+        // let's say an address that was not the bidder wants to cancel the bid
+        vm.startPrank(borrower);
+        vm.expectRevert("NFTPreBidder: Only bidder can cancel");
+        preBidder.cancelBid(bidId);
     }
 
     function setUpWithPunk(address addr) public returns (uint256 tokenId) {

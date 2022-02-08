@@ -127,15 +127,14 @@ contract NFTPreBidder is Ownable, INFTPreBidder {
         _fulfillBid(bidId, loanId);
     }
 
-    /// See {INFTPreBidder-fulfillBid}.
+    /// See {INFTPreBidder-fulfillBidWithNoApprovals}.
     function fulfillBidWithNoApprovals(uint256 bidId, uint256 loanId)
         external
         override
         bidExists(bidId)
     {
-        Bid memory bid = _bidInfo[bidId];
         require(
-            _collateralAndLoanAssetMatch(bid, loanId),
+            _collateralAndLoanAssetMatch(_bidInfo[bidId], loanId),
             "NFTPreBidder: collateral or loan asset do not match"
         );
 
@@ -143,6 +142,10 @@ contract NFTPreBidder is Ownable, INFTPreBidder {
     }
 
     function cancelBid(uint256 bidId) external bidExists(bidId) {
+        require(
+            msg.sender == _bidInfo[bidId].bidder,
+            "NFTPreBidder: Only bidder can cancel"
+        );
         delete _bidInfo[bidId];
     }
 
